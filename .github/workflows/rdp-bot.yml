@@ -1,0 +1,102 @@
+name: GitHub RDP Tailscale + Python Bot
+
+on:
+  workflow_dispatch:
+    inputs:
+      password:
+        description: 'set rdp password'
+        required: true
+        default: 'king'
+  schedule:
+    # Redemarrage automatic kola 5 d l-swaye3 bach nfouto l-limite d 6h dyal GitHub
+    - cron: '0 */5 * * *'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initializing Environment
+        run: echo "Starting server deployment..."
+
+      # ---- 1. SETUP PYTHON W L-BOT ----
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Bot Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path "requirements.txt") { pip install -r requirements.txt }
+          # Ila bghiti t-installi dependencies direct hna zydhom bhal:
+          # pip install pyTelegramBotAPI discord.py requests
+
+      - name: Start Python Bot in Background
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        run: |
+          echo "Launching Python Bot in background..."
+          # Had l-command katkhdem l-bot f background bach mybloquish l-RDP
+          Start-Process python -ArgumentList "main.py" -NoNewWindow -PassThru
+          echo "Bot is running."
+
+      # ---- 2. SETUP TAILSCALE & RDP ----
+      - name: Installing Tailscale
+        run: |
+          echo "Downloading tailscale..."
+          invoke-webrequest -uri 'https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe' -outfile 'tailscale.exe'
+          start-process -filepath "tailscale.exe" -argumentlist "/quiet" -wait
+          echo "Waiting for service..."
+          start-sleep -seconds 15
+          echo "Tailscale setup complete."
+
+      - name: Authenticating Tailscale
+        run: |
+          echo "Linking to tailscale network..."
+          & "c:\program files\tailscale\tailscale.exe" up --authkey=${{ secrets.TS_KEY }} --hostname=cloud-rdp-server --accept-routes
+          echo "Authentication successful."
+
+      - name: Disabling Password Policy
+        run: |
+          echo "Killing windows password complexity requirements..."
+          secedit /export /cfg config.inf
+          (get-content config.inf) -replace 'PasswordComplexity = 1', 'PasswordComplexity = 0' | set-content config.inf
+          secedit /configure /db $env:temp\temp.sdb /cfg config.inf /areas SECURITYPOLICY
+          echo "Policy disabled."
+
+      - name: Configuring Remote Desktop
+        run: |
+          echo "Setting up user credentials..."
+          # Hna ghadi n-afectiw pass default 'king' ila t-runat b-schedule, aw pass li khtarti f workflow_dispatch
+          $PASSWORD = "${{ github.event.inputs.password }}"
+          if ([string]::IsNullOrEmpty($PASSWORD)) { $PASSWORD = "king" }
+          net user Apela $PASSWORD /y /add
+          net localgroup administrators Apela /add
+          
+          echo "Configuring registry and firewall..."
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+          Enable-NetFirewallRule -DisplayGroup "Remote Desktop" -ErrorAction SilentlyContinue
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -value 1
+          
+          echo "RDP protocol enabled."
+
+      - name: Maintaining Connection & Monitoring
+        run: |
+          $PASSWORD = "${{ github.event.inputs.password }}"
+          if ([string]::IsNullOrEmpty($PASSWORD)) { $PASSWORD = "king" }
+          echo "=========================================="
+          echo "Server is live & Bot is running f background!"
+          echo "Username: Apela"
+          echo "Password: $PASSWORD"
+          echo "Internal IP Address:"
+          & "c:\program files\tailscale\tailscale.exe" ip -4
+          echo "=========================================="
+          
+          # Loop dyal RDP keep-alive
+          while ($true) {
+            echo "Keep-alive: $(get-date)"
+            start-sleep -seconds 300
+          }
