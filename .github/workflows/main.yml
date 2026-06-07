@@ -5,7 +5,7 @@ on:
       password:
         description: 'set rdp password'
         required: true
-        default: 'Atay@Bna3na3#2026'
+        default: 'king'
 
 jobs:
   build:
@@ -40,7 +40,7 @@ jobs:
       - name: configuring remote desktop
         run: |
           echo "setting up user credentials..."
-          net user runneradmin "${{ github.event.inputs.password }}" /y
+          net user Apela King "${{ github.event.inputs.password }}" /y
           
           echo "configuring registry and firewall..."
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
@@ -54,7 +54,7 @@ jobs:
         run: |
           echo "=========================================="
           echo "server is live"
-          echo "username: runneradmin"
+          echo "username: Apela King"
           echo "password: ${{ github.event.inputs.password }}"
           echo "internal ip address:"
           & "c:\program files\tailscale\tailscale.exe" ip -4
